@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Բինար կոդավորիչ</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        background: #0d1117;
+        color: #e6edf3;
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 850px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 16px;
+        padding: 25px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+    }
+
+    h1 {
+        text-align: center;
+        margin-top: 0;
+        margin-bottom: 8px;
+    }
+
+    .subtitle {
+        text-align: center;
+        color: #8b949e;
+        margin-bottom: 25px;
+    }
+
+    textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        background: #0d1117;
+        color: #e6edf3;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 15px;
+        font-size: 16px;
+        line-height: 1.6;
+        outline: none;
+        font-family: monospace;
+    }
+
+    textarea:focus {
+        border-color: #58a6ff;
+    }
+
+    .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 15px 0;
+    }
+
+    button {
+        flex: 1;
+        min-width: 140px;
+        padding: 13px 16px;
+        border: none;
+        border-radius: 9px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: bold;
+        background: #238636;
+        color: white;
+    }
+
+    button:hover {
+        opacity: 0.85;
+    }
+
+    .decode {
+        background: #1f6feb;
+    }
+
+    .copy {
+        background: #8957e5;
+    }
+
+    .clear {
+        background: #da3633;
+    }
+
+    .label {
+        display: block;
+        margin: 10px 0;
+        color: #8b949e;
+        font-size: 14px;
+    }
+
+    .result {
+        margin-top: 20px;
+    }
+
+    .info {
+        margin-top: 15px;
+        padding: 12px;
+        background: #0d1117;
+        border-radius: 8px;
+        color: #8b949e;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 600px) {
+        .container {
+            padding: 18px;
+        }
+
+        button {
+            min-width: 100%;
+        }
+
+        textarea {
+            min-height: 150px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🔐 Բինար կոդավորիչ</h1>
+
+    <div class="subtitle">
+        Տեքստ ↔ 01001001...
+    </div>
+
+    <label class="label">Մուտքագրիր տեքստ կամ բինար կոդ</label>
+
+    <textarea id="inputText"
+        placeholder="Օրինակ՝ I love you
+
+կամ
+
+01001001 00100000 01101100 01101111 01110110 01100101"></textarea>
+
+    <div class="buttons">
+        <button onclick="encodeText()">➡️ Տեքստ → Բինար</button>
+        <button class="decode" onclick="decodeBinary()">⬅️ Բինար → Տեքստ</button>
+    </div>
+
+    <div class="result">
+
+        <label class="label">Արդյունք</label>
+
+        <textarea id="outputText"
+            readonly
+            placeholder="Այստեղ կհայտնվի արդյունքը..."></textarea>
+
+        <div class="buttons">
+            <button class="copy" onclick="copyResult()">📋 Copy</button>
+            <button class="clear" onclick="clearAll()">🗑️ Մաքրել</button>
+        </div>
+
+    </div>
+
+    <div class="info">
+        💡 Կարող ես գրել սովորական տեքստ, օրինակ՝
+        <b>I love you</b>, և ստանալ բինար կոդ։
+        <br><br>
+        Կամ տեղադրել բինար կոդը և սեղմել
+        <b>«Բինար → Տեքստ»</b>։
+        <br><br>
+        Աջակցում է նաև հայերեն տառերին։
+    </div>
+
+</div>
+
+<script>
+
+function encodeText() {
+
+    const text = document.getElementById("inputText").value;
+
+    if (!text.trim()) {
+        alert("Գրիր որևէ տեքստ։");
+        return;
+    }
+
+    const bytes = new TextEncoder().encode(text);
+
+    const binary = Array.from(bytes)
+        .map(byte => byte.toString(2).padStart(8, "0"))
+        .join(" ");
+
+    document.getElementById("outputText").value = binary;
+}
+
+
+function decodeBinary() {
+
+    const input = document.getElementById("inputText").value.trim();
+
+    if (!input) {
+        alert("Տեղադրիր բինար կոդ։");
+        return;
+    }
+
+    // Հեռացնում ենք ավելորդ նշանները և բաժանում 8-բիթանոց խմբերի
+    const clean = input.replace(/[^01]/g, "");
+
+    if (clean.length === 0) {
+        alert("Բինար կոդ չի հայտնաբերվել։");
+        return;
+    }
+
+    if (clean.length % 8 !== 0) {
+        alert("Բինար կոդը պետք է կազմված լինի 8-բիթանոց խմբերից։");
+        return;
+    }
+
+    const bytes = [];
+
+    for (let i = 0; i < clean.length; i += 8) {
+
+        const byte = clean.substring(i, i + 8);
+
+        bytes.push(parseInt(byte, 2));
+    }
+
+    try {
+
+        const text = new TextDecoder("utf-8", {
+            fatal: true
+        }).decode(new Uint8Array(bytes));
+
+        document.getElementById("outputText").value = text;
+
+    } catch (error) {
+
+        alert("Այս բինար կոդը ճիշտ UTF-8 տեքստ չէ։");
+
+    }
+}
+
+
+function copyResult() {
+
+    const result = document.getElementById("outputText").value;
+
+    if (!result) {
+        alert("Copy անելու բան չկա։");
+        return;
+    }
+
+    navigator.clipboard.writeText(result)
+        .then(() => {
+            alert("✅ Պատճենված է։");
+        })
+        .catch(() => {
+
+            const textarea = document.getElementById("outputText");
+
+            textarea.select();
+            document.execCommand("copy");
+
+            alert("✅ Պատճենված է։");
+        });
+}
+
+
+function clearAll() {
+
+    document.getElementById("inputText").value = "";
+    document.getElementById("outputText").value = "";
+
+}
+
+</script>
+
+</body>
+</html>
