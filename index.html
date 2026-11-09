@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Վաճառքի հաշվարկ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, sans-serif; background: #f3f3f3; color: #222; }
+.container { max-width: 700px; margin: 30px auto; padding: 20px; }
+h1 { text-align: center; margin-bottom: 20px; }
+textarea { width: 100%; min-height: 220px; padding: 15px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; resize: vertical; font-family: Arial, sans-serif; }
+.main-buttons { display: flex; gap: 10px; margin-top: 12px; }
+.main-buttons button { flex: 1; }
+button { border: none; border-radius: 8px; padding: 11px 15px; font-size: 15px; cursor: pointer; }
+button:disabled { opacity: 0.6; }
+.calculate-btn { background: #111; color: white; }
+.products-btn { background: #ddd; }
+.result { margin-top: 20px; }
+.sale-item { background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; }
+.sale-item strong { display: block; margin-bottom: 8px; }
+.totals { background: #111; color: white; border-radius: 10px; padding: 18px; line-height: 1.9; margin-top: 15px; }
+.error { background: #ffe4e4; color: #a00000; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.55); padding: 20px; overflow-y: auto; }
+.modal-content { width: 100%; max-width: 650px; margin: 30px auto; background: white; border-radius: 14px; padding: 20px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-header h2 { margin: 0; }
+.close-btn { background: #eee; font-size: 22px; padding: 5px 12px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+.form-group input { width: 100%; padding: 11px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
+.save-product-btn { width: 100%; background: #111; color: white; }
+.cancel-edit-btn { width: 100%; margin-top: 8px; background: #ddd; display: none; }
+.product-list { margin-top: 25px; }
+.product-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #f7f7f7; padding: 12px; border-radius: 9px; margin-bottom: 8px; }
+.product-info { flex: 1; min-width: 0; }
+.product-name { font-weight: bold; word-break: break-word; }
+.product-cost { margin-top: 4px; color: #555; }
+.product-actions { display: flex; gap: 6px; }
+.edit-btn { background: #ddd; }
+.delete-btn { background: #ffdada; color: #a00000; }
+.loading { text-align: center; color: #666; padding: 15px; }
+@media (max-width: 600px) {
+    .container { margin: 10px auto; padding: 12px; }
+    .product-item { flex-direction: column; align-items: flex-start; }
+    .product-actions { width: 100%; }
+    .product-actions button { flex: 1; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>Վաճառքի հաշվարկ</h1>
+
+    <textarea id="salesInput" placeholder="Elfbar20 6000
+Elfbar50 20000
+3xElfbar20 4500"></textarea>
+
+    <div class="main-buttons">
+        <button class="calculate-btn" onclick="calculateSales()">Հաշվել</button>
+        <button class="products-btn" onclick="openProducts()">Ապրանքներ</button>
+    </div>
+
+    <div id="result" class="result"></div>
+</div>
+
+
+<!-- ԱՊՐԱՆՔՆԵՐ -->
+<div id="productsModal" class="modal">
+    <div class="modal-content">
+
+        <div class="modal-header">
+            <h2>Ապրանքներ</h2>
+            <button class="close-btn" onclick="closeProducts()">×</button>
+        </div>
+
+        <div class="form-group">
+            <label>Ապրանքի անուն</label>
+            <input id="productName" type="text" placeholder="Օր․ Elfbar 20k">
+        </div>
+
+        <div class="form-group">
+            <label>Ինքնարժեք</label>
+            <input id="productCost" type="number" placeholder="Օր․ 2000">
+        </div>
+
+        <button id="saveProductButton" class="save-product-btn" onclick="saveProduct()">Պահպանել</button>
+
+        <button id="cancelEditButton" class="cancel-edit-btn" onclick="cancelEdit()">Չեղարկել փոփոխությունը</button>
+
+        <div id="productList" class="product-list"></div>
+
+    </div>
+</div>
+
+
+<script>
+
+/* =====================================================
+   SUPABASE
+===================================================== */
+
+const SUPABASE_URL = "https://lklrypbwujwncokdvbpi.supabase.co";
+
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_2rRtfSQmA__E3Z6h8FpyYw_lfNh1S_3";
+
+const salesSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+
+/* =====================================================
+   ՀԻՆ ԱՊՐԱՆՔՆԵՐ
+===================================================== */
+
+const defaultProducts = [
+    { name: "pynepod", cost: 2100 },
+    { name: "odens", cost: 500 },
+    { name: "elfbar30", cost: 4700 },
+    { name: "ignite12", cost: 4000 },
+    { name: "waka38", cost: 5800 },
+    { name: "pyro", cost: 500 },
+    { name: "puffme", cost: 500 },
+    { name: "meloso", cost: 2900 },
+    { name: "hyppe", cost: 3000 },
+    { name: "dojo", cost: 3700 },
+    { name: "chilax", cost: 2700 },
+    { name: "waka20", cost: 4600 },
+    { name: "hqd", cost: 1300 },
+    { name: "lostangel", cost: 3200 },
+    { name: "ijoy", cost: 3100 },
+    { name: "solaris", cost: 2900 },
+    { name: "waka2500", cost: 1300 },
+    { name: "yooz", cost: 2300 },
+    { name: "puffme12", cost: 2400 },
+    { name: "toomoro", cost: 3000 },
+    { name: "elfbar40", cost: 4800 },
+    { name: "elfbar25", cost: 4200 },
+    { name: "maxfly", cost: 2600 },
+    { name: "ignite25", cost: 7500 },
+    { name: "sherbet", cost: 750 },
+    { name: "fumari", cost: 900 },
+    { name: "acux", cost: 350 },
+    { name: "pipich", cost: 600 },
+    { name: "udn", cost: 2600 },
+    { name: "solobar", cost: 1800 },
+    { name: "brusko", cost: 600 },
+    { name: "elfbar pod", cost: 2400 },
+    { name: "puffme16", cost: 2000 },
+    { name: "ignite35", cost: 7900 },
+    { name: "yooz qartrij", cost: 1400 },
+    { name: "fumo", cost: 700 }
+];
+
+
+/* =====================================================
+   VARIABLES
+===================================================== */
+
+let products = [];
+let editingId = null;
+
+
+/* =====================================================
+   ՕԳՆԱԿԱՆ ՖՈՒՆԿՑԻԱՆԵՐ
+===================================================== */
+
+function normalizeName(name) {
+    return String(name).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function parseMoney(value) {
+    return Number(String(value).replace(/[^\d]/g, ""));
+}
+
+function formatNumber(number) {
+    return Number(number || 0).toLocaleString("en-US");
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+/* =====================================================
+   ԲԵՌՆԵԼ ԱՊՐԱՆՔՆԵՐ
+===================================================== */
+
+async function loadProducts() {
+
+    const list = document.getElementById("productList");
+
+    list.innerHTML = `<div class="loading">Ապրանքները բեռնվում են...</div>`;
+
+    const response = await salesSupabase
+        .from("products")
+        .select("*")
+        .order("id", { ascending: true });
+
+    if (response.error) {
+        console.error(response.error);
+        list.innerHTML = `
+            <div class="error">
+                Չհաջողվեց բեռնել ապրանքները։<br><br>
+                ${escapeHtml(response.error.message)}
+            </div>
+        `;
+        return;
+    }
+
+    products = response.data || [];
+
+    /* Բացակայող հին ապրանքները ավելացվում են */
+
+    const existingNames = new Set(
+        products.map(product => normalizeName(product.name))
+    );
+
+    const missingProducts = defaultProducts.filter(product => {
+        return !existingNames.has(normalizeName(product.name));
+    });
+
+    if (missingProducts.length > 0) {
+
+        const insertResponse = await salesSupabase
+            .from("products")
+            .insert(missingProducts);
+
+        if (insertResponse.error) {
+            console.error(insertResponse.error);
+            list.innerHTML = `
+                <div class="error">
+                    Չհաջողվեց ավելացնել բացակայող ապրանքները։<br><br>
+                    ${escapeHtml(insertResponse.error.message)}
+                </div>
+            `;
+            return;
+        }
+
+        const reloadResponse = await salesSupabase
+            .from("products")
+            .select("*")
+            .order("id", { ascending: true });
+
+        if (reloadResponse.error) {
+            console.error(reloadResponse.error);
+            list.innerHTML = `
+                <div class="error">
+                    Չհաջողվեց թարմացնել ապրանքների ցանկը։
+                </div>
+            `;
+            return;
+        }
+
+        products = reloadResponse.data || [];
+    }
+
+    renderProducts();
+}
+
+
+/* =====================================================
+   ԱՊՐԱՆՔՆԵՐԻ ՊԱՏՈՒՀԱՆ
+===================================================== */
+
+function openProducts() {
+    document.getElementById("productsModal").style.display = "block";
+    renderProducts();
+}
+
+function closeProducts() {
+    document.getElementById("productsModal").style.display = "none";
+    cancelEdit();
+}
+
+
+/* =====================================================
+   ԱՎԵԼԱՑՆԵԼ / ՓՈՓՈԽԵԼ
+===================================================== */
+
+async function saveProduct() {
+
+    const nameInput = document.getElementById("productName");
+    const costInput = document.getElementById("productCost");
+
+    const name = nameInput.value.trim();
+    const cost = Number(costInput.value);
+
+    if (!name) {
+        alert("Գրիր ապրանքի անունը");
+        return;
+    }
+
+    if (!cost || cost <= 0) {
+        alert("Գրիր ճիշտ ինքնարժեք");
+        return;
+    }
+
+    const duplicate = products.find(product => {
+        return normalizeName(product.name) === normalizeName(name)
+            && product.id !== editingId;
+    });
+
+    if (duplicate) {
+        alert("Այս ապրանքն արդեն գրանցված է։");
+        return;
+    }
+
+    const saveButton = document.getElementById("saveProductButton");
+    saveButton.disabled = true;
+
+    let response;
+
+    if (editingId === null) {
+        response = await salesSupabase
+            .from("products")
+            .insert({ name: name, cost: cost });
+    } else {
+        response = await salesSupabase
+            .from("products")
+            .update({ name: name, cost: cost })
+            .eq("id", editingId);
+    }
+
+    saveButton.disabled = false;
+
+    if (response.error) {
+        console.error(response.error);
+        alert("Չհաջողվեց պահպանել ապրանքը։\n\n" + response.error.message);
+        return;
+    }
+
+    cancelEdit();
+    await loadProducts();
+}
+
+
+/* =====================================================
+   ՓՈՓՈԽԵԼ
+===================================================== */
+
+function editProduct(id) {
+
+    const product = products.find(item => item.id === id);
+
+    if (!product) {
+        return;
+    }
+
+    document.getElementById("productName").value = product.name;
+    document.getElementById("productCost").value = product.cost;
+
+    editingId = id;
+
+    document.getElementById("saveProductButton").textContent = "Պահպանել փոփոխությունը";
+    document.getElementById("cancelEditButton").style.display = "block";
+    document.getElementById("productName").focus();
+}
+
+
+/* =====================================================
+   ՉԵՂԱՐԿԵԼ
+===================================================== */
+
+function cancelEdit() {
+
+    editingId = null;
+
+    document.getElementById("productName").value = "";
+    document.getElementById("productCost").value = "";
+
+    document.getElementById("saveProductButton").textContent = "Պահպանել";
+    document.getElementById("cancelEditButton").style.display = "none";
+}
+
+
+/* =====================================================
+   ՋՆՋԵԼ
+===================================================== */
+
+async function deleteProduct(id) {
+
+    const product = products.find(item => item.id === id);
+
+    if (!product) {
+        return;
+    }
+
+    const confirmed = confirm(`Ջնջե՞լ «${product.name}» ապրանքը։`);
+
+    if (!confirmed) {
+        return;
+    }
+
+    const response = await salesSupabase
+        .from("products")
+        .delete()
+        .eq("id", id);
+
+    if (response.error) {
+        console.error(response.error);
+        alert("Չհաջողվեց ջնջել ապրանքը։\n\n" + response.error.message);
+        return;
+    }
+
+    if (editingId === id) {
+        cancelEdit();
+    }
+
+    await loadProducts();
+}
+
+
+/* =====================================================
+   ՑՈՒՑԱԿ
+===================================================== */
+
+function renderProducts() {
+
+    const list = document.getElementById("productList");
+
+    if (!products.length) {
+        list.innerHTML = `<div class="loading">Ապրանքներ չկան։</div>`;
+        return;
+    }
+
+    list.innerHTML = "";
+
+    products.forEach(product => {
+
+        const item = document.createElement("div");
+        item.className = "product-item";
+
+        item.innerHTML = `
+            <div class="product-info">
+                <div class="product-name">${escapeHtml(product.name)}</div>
+                <div class="product-cost">Ինքնարժեք՝ ${formatNumber(product.cost)} ֏</div>
+            </div>
+
+            <div class="product-actions">
+                <button class="edit-btn" onclick="editProduct(${product.id})">Փոխել</button>
+                <button class="delete-btn" onclick="deleteProduct(${product.id})">Ջնջել</button>
+            </div>
+        `;
+
+        list.appendChild(item);
+    });
+}
+
+
+/* =====================================================
+   ՎԱՃԱՌՔԻ ՏՈՂԻ ՎԵՐԼՈՒԾՈՒՄ
+
+   Վերջին թիվը տողում = գինը ՄԵԿ հատի համար։
+
+   Elfbar20 6000        -> 1 հատ, վաճառք 6000
+   2x Odens 1000        -> 2 հատ, վաճառք 2000 (1000 x 2)
+   3xElfbar20 4500      -> 3 հատ, վաճառք 13500 (4500 x 3)
+===================================================== */
+
+function parseSaleLine(line) {
+
+    // վերջին թիվը տողում = գինը
+    const match = line.match(/^\s*(.*\S)\s+(\d[\d.,]*)\s*$/);
+
+    if (!match) {
+        return null;
+    }
+
+    const productText = match[1].trim();
+    const price = parseMoney(match[2]);
+
+    if (!productText || price <= 0) {
+        return null;
+    }
+
+    const quantityMatch = productText.match(/^\s*(\d+)\s*x\s*(.+)$/i);
+
+    if (quantityMatch) {
+
+        const quantity = Number(quantityMatch[1]);
+
+        return {
+            quantity: quantity,
+            productName: quantityMatch[2].trim(),
+            salePrice: price * quantity
+        };
+    }
+
+    return {
+        quantity: 1,
+        productName: productText,
+        salePrice: price
+    };
+}
+
+
+/* =====================================================
+   ՀԱՇՎԵԼ
+===================================================== */
+
+function calculateSales() {
+
+    const input = document.getElementById("salesInput").value;
+    const result = document.getElementById("result");
+
+    result.innerHTML = "";
+
+    const lines = input
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line);
+
+    if (!lines.length) {
+        result.innerHTML = `<div class="error">Գրիր վաճառքները։</div>`;
+        return;
+    }
+
+    let totalSale = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+    let totalUserHalf = 0;
+
+    let html = "";
+
+    lines.forEach(line => {
+
+        const parsed = parseSaleLine(line);
+
+        if (!parsed) {
+            html += `
+                <div class="error">
+                    Այս տողը չհասկացա՝ ${escapeHtml(line)}
+                </div>
+            `;
+            return;
+        }
+
+        const product = products.find(product => {
+            return normalizeName(product.name) === normalizeName(parsed.productName);
+        });
+
+        if (!product) {
+            html += `
+                <div class="error">
+                    Ապրանքը գրանցված չէ՝ ${escapeHtml(parsed.productName)}
+                </div>
+            `;
+            return;
+        }
+
+        const quantity = parsed.quantity;
+        const sale = parsed.salePrice;
+        const cost = Number(product.cost) * quantity;
+        const profit = sale - cost;
+        const userHalf = profit / 2;
+
+        totalSale += sale;
+        totalCost += cost;
+        totalProfit += profit;
+        totalUserHalf += userHalf;
+
+        html += `
+            <div class="sale-item">
+                <strong>${quantity} × ${escapeHtml(product.name)}</strong>
+                <div>Վաճառք՝ ${formatNumber(sale)} ֏</div>
+                <div>Ինքնարժեք՝ ${formatNumber(cost)} ֏</div>
+                <div>Մաքուր շահույթ՝ ${formatNumber(profit)} ֏</div>
+                <div>Քո կեսը՝ ${formatNumber(userHalf)} ֏</div>
+            </div>
+        `;
+    });
+
+    html += `
+        <div class="totals">
+            <div>Ընդհանուր վաճառք՝ <strong>${formatNumber(totalSale)} ֏</strong></div>
+            <div>Ընդհանուր ինքնարժեք՝ <strong>${formatNumber(totalCost)} ֏</strong></div>
+            <div>Ընդհանուր մաքուր շահույթ՝ <strong>${formatNumber(totalProfit)} ֏</strong></div>
+            <div>Քո կեսը՝ <strong>${formatNumber(totalUserHalf)} ֏</strong></div>
+        </div>
+    `;
+
+    result.innerHTML = html;
+}
+
+
+/* =====================================================
+   MODAL
+===================================================== */
+
+window.addEventListener("click", function(event) {
+
+    const modal = document.getElementById("productsModal");
+
+    if (event.target === modal) {
+        closeProducts();
+    }
+});
+
+
+/* =====================================================
+   ՍԿԻԶԲ
+===================================================== */
+
+document.addEventListener("DOMContentLoaded", function() {
+    loadProducts();
+});
+
+</script>
+
+</body>
+</html>
